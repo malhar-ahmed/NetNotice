@@ -31,7 +31,55 @@ public class NetNoticeClient {
 
             System.out.println("Connected to NetNotice Server!");
 
+            String greeting = reader.readLine();
+
+            if (greeting == null) {
+                System.out.println("Server disconnected.");
+                return;
+            }
+
+            System.out.println("[SERVER] " + greeting);
+
+            String clientName;
+
+            // Join the server using a display name
+            while (true) {
+
+                System.out.print("Enter display name: ");
+
+                if (!scanner.hasNextLine()) {
+                    return;
+                }
+
+                clientName = scanner.nextLine().trim();
+
+                if (clientName.isEmpty()
+                        || clientName.length() > 20
+                        || clientName.contains("|")) {
+
+                    System.out.println("Invalid name. Try again.");
+                    continue;
+                }
+
+                writer.println("JOIN|" + clientName);
+
+                String response = reader.readLine();
+
+                if (response == null) {
+                    System.out.println("Server disconnected.");
+                    return;
+                }
+
+                System.out.println("[SERVER] " + response);
+
+                if (response.equals("JOINED|" + clientName)) {
+                    break;
+                }
+            }
+
+            // Listen for server messages
             Thread listener = new Thread(() -> {
+
                 try {
                     String response;
 
@@ -39,7 +87,7 @@ public class NetNoticeClient {
                         System.out.println("[SERVER] " + response);
                     }
 
-                    System.out.println("Server closed the connection.");
+                    System.out.println("Server disconnected.");
 
                 } catch (IOException e) {
                     if (!socket.isClosed()) {
@@ -52,15 +100,17 @@ public class NetNoticeClient {
             listener.setDaemon(true);
             listener.start();
 
-            System.out.println("Type messages below.");
+            System.out.println("You can now send messages.");
             System.out.println("Type 'exit' to disconnect.");
 
+            // Send messages to server
             while (scanner.hasNextLine()) {
 
                 String input = scanner.nextLine();
 
                 if (input.equalsIgnoreCase("exit")) {
-                    writer.println("DISCONNECT");
+
+                    writer.println("DISCONNECT|" + clientName);
                     break;
                 }
 

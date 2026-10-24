@@ -10,6 +10,7 @@ import java.net.Socket;
 public class ClientHandler implements Runnable {
 
     private final Socket socket;
+    private String clientName;
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -36,32 +37,77 @@ public class ClientHandler implements Runnable {
 
             while ((message = reader.readLine()) != null) {
 
-                if (message.equals("DISCONNECT")) {
-                    System.out.println("Client requested disconnect.");
-                    break;
+                // Client registration
+                if (message.startsWith("JOIN|")) {
+
+                    if (clientName != null) {
+                        writer.println("ERROR|Already joined");
+                        continue;
+                    }
+
+                    String name = message.substring(5).trim();
+
+                    if (name.isEmpty() || name.length() > 20
+                            || name.contains("|")) {
+
+                        writer.println("ERROR|Invalid display name");
+                        continue;
+                    }
+
+                    boolean registered =
+                            NetNoticeServer.registerClient(name, this);
+
+                    if (registered) {
+                        clientName = name;
+                        writer.println("JOINED|" + clientName);
+                    } else {
+                        writer.println("ERROR|Name already in use");
+                    }
+
                 }
 
-                if (message.startsWith("MESSAGE|")) {
+                // Receive messages
+                else if (message.startsWith("MESSAGE|")) {
+
+                    if (clientName == null) {
+                        writer.println("ERROR|Please join first");
+                        continue;
+                    }
 
                     String text = message.substring(8);
 
                     System.out.println(
-                        "Client " + socket.getRemoteSocketAddress()
-                        + " says: " + text
+                        "[" + clientName + "] " + text
                     );
 
                     writer.println("MESSAGE|Server received: " + text);
+                }
 
-                } else {
+                // Client disconnect request
+                else if (message.equals("DISCONNECT")
+                        || (clientName != null &&
+                        message.equals("DISCONNECT|" + clientName))) {
+
+                    break;
+                }
+
+                // Unknown message type
+                else {
                     writer.println("ERROR|Unknown message type");
                 }
             }
 
         } catch (IOException e) {
-            System.out.println("Client error: " + e.getMessage());
-        }
+            System.out.println("Connection error: " + e.getMessage());
 
-        System.out.println("Client disconnected: "
-                + socket.getRemoteSocketAddress());
+        } finally {
+
+            if (clientName != null) {
+                NetNoticeServer.removeClient(clientName, this);
+            }
+
+            System.out.println("Connection closed: "
+                    + socket.getRemoteSocketAddress());
+        }
     }
 }
