@@ -12,7 +12,9 @@ public class NetNoticeClient {
 
     public static void main(String[] args) {
 
-        String serverIP = "127.0.0.1";
+        String serverIP = args.length > 0
+        ? args[0]
+        : "127.0.0.1";
         int port = 5000;
 
         try (
