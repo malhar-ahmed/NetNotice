@@ -36,6 +36,8 @@ import netnotice.common.Protocol;
  */
 public class ServerGUI extends JFrame implements NetNoticeServer.ServerListener {
 
+    private static final long serialVersionUID = 1L;
+
     private JLabel statusLabel;
     private JTextField portField;
     private JButton startStopButton;
@@ -48,6 +50,7 @@ public class ServerGUI extends JFrame implements NetNoticeServer.ServerListener 
 
     private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm:ss");
 
+    @SuppressWarnings("this-escape")
     public ServerGUI() {
         super("NetNotice - Server Admin");
         initUI();

@@ -36,6 +36,8 @@ import netnotice.common.Protocol;
  */
 public class ClientGUI extends JFrame {
 
+    private static final long serialVersionUID = 1L;
+
     private JTextField nameField;
     private JTextField ipField;
     private JTextField portField;
@@ -48,14 +50,15 @@ public class ClientGUI extends JFrame {
     private JTextArea historyArea;
 
     // Networking
-    private Socket socket;
-    private BufferedReader reader;
-    private PrintWriter writer;
-    private Thread listenerThread;
+    private transient Socket socket;
+    private transient BufferedReader reader;
+    private transient PrintWriter writer;
+    private transient Thread listenerThread;
     private volatile boolean isConnected = false;
 
     private static final SimpleDateFormat TIME_FORMAT = new SimpleDateFormat("HH:mm:ss");
 
+    @SuppressWarnings("this-escape")
     public ClientGUI() {
         super("NetNotice - Client");
         initUI();
