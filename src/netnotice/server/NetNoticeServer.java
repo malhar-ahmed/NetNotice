@@ -19,7 +19,7 @@ public class NetNoticeServer {
 
     private static final Map<String, ClientHandler> connectedClients = new HashMap<>();
     private static ServerSocket serverSocket;
-    private static boolean isRunning = false;
+    private static volatile boolean isRunning = false;
     private static ServerListener listener;
 
     /**
@@ -93,15 +93,16 @@ public class NetNoticeServer {
             startServer(port);
             System.out.println("Running in console mode. Type an announcement to broadcast, or 'exit' to quit:");
 
-            Scanner scanner = new Scanner(System.in);
-            while (scanner.hasNextLine()) {
-                String input = scanner.nextLine().trim();
-                if (input.equalsIgnoreCase("exit")) {
-                    stopServer();
-                    break;
-                }
-                if (!input.isEmpty()) {
-                    broadcastAnnouncement(input);
+            try (Scanner scanner = new Scanner(System.in)) {
+                while (scanner.hasNextLine()) {
+                    String input = scanner.nextLine().trim();
+                    if (input.equalsIgnoreCase("exit")) {
+                        stopServer();
+                        break;
+                    }
+                    if (!input.isEmpty()) {
+                        broadcastAnnouncement(input);
+                    }
                 }
             }
         } catch (IOException e) {
