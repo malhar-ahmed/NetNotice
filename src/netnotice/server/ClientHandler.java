@@ -86,6 +86,16 @@ public class ClientHandler implements Runnable {
                     if (registered) {
                         clientName = name;
                         sendMessage(Protocol.PREFIX_JOINED + clientName);
+
+                        // Send current active poll to newly joined client (Member 3)
+                        String pollMsg = NetNoticeServer.getCurrentPollMessage();
+                        if (pollMsg != null) {
+                            sendMessage(pollMsg);
+                            String resultMsg = NetNoticeServer.getCurrentPollResultMessage();
+                            if (resultMsg != null) {
+                                sendMessage(resultMsg);
+                            }
+                        }
                     } else {
                         sendMessage(Protocol.PREFIX_ERROR + "Name already in use");
                     }
@@ -113,10 +123,27 @@ public class ClientHandler implements Runnable {
                     break;
                 }
 
-                // ========================================================
-                // MEMBER 3 HOOK: Receive student answer responses
-                // e.g., if (message.startsWith("ANSWER|")) { ... }
-                // ========================================================
+                // Poll answer from client (Member 3)
+                else if (message.startsWith(Protocol.PREFIX_ANSWER)) {
+
+                    if (clientName == null) {
+                        sendMessage(Protocol.PREFIX_ERROR + "Please join first");
+                        continue;
+                    }
+
+                    try {
+                        int optionIndex = Integer.parseInt(
+                                message.substring(Protocol.PREFIX_ANSWER.length()).trim());
+
+                        boolean accepted = NetNoticeServer.submitPollAnswer(clientName, optionIndex);
+
+                        if (!accepted) {
+                            sendMessage(Protocol.PREFIX_ERROR + "No active poll or invalid option");
+                        }
+                    } catch (NumberFormatException e) {
+                        sendMessage(Protocol.PREFIX_ERROR + "Invalid answer format");
+                    }
+                }
 
                 // Unknown message type
                 else {

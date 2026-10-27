@@ -14,17 +14,13 @@ public class Protocol {
     public static final String PREFIX_JOIN = "JOIN|";
     public static final String PREFIX_MESSAGE = "MESSAGE|";
     public static final String PREFIX_DISCONNECT = "DISCONNECT";
+    public static final String PREFIX_ANSWER = "ANSWER|";           // Client submits poll answer: ANSWER|optionIndex
 
     // Server -> Client
     public static final String PREFIX_JOINED = "JOINED|";
     public static final String PREFIX_ANNOUNCEMENT = "ANNOUNCEMENT|";
     public static final String PREFIX_ERROR = "ERROR|";
-
-    // ========================================================
-    // MEMBER 3 HOOKS: Poll & Quiz Response System
-    // (Reserved for Member 3 implementation)
-    // ========================================================
-    // public static final String PREFIX_QUESTION = "QUESTION|";
-    // public static final String PREFIX_ANSWER = "ANSWER|";
-    // public static final String PREFIX_RESULTS = "RESULTS|";
+    public static final String PREFIX_POLL = "POLL|";               // Server sends poll: POLL|question|opt1|opt2|...
+    public static final String PREFIX_POLL_RESULT = "POLL_RESULT|"; // Live results: POLL_RESULT|count1|count2|...
+    public static final String PREFIX_POLL_END = "POLL_END|";       // Poll ended: POLL_END|count1|count2|...
 }
