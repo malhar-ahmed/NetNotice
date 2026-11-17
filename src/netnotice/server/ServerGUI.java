@@ -11,8 +11,15 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.io.IOException;
+import java.net.DatagramSocket;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
@@ -46,6 +53,7 @@ public class ServerGUI extends JFrame implements NetNoticeServer.ServerListener 
     // Header & Server Controls
     private UITheme.StatusBadge serverStatusBadge;
     private JTextField portField;
+    private JTextField addressDisplay;
     private UITheme.FlatButton startStopButton;
 
     // Client Roster
@@ -157,17 +165,19 @@ public class ServerGUI extends JFrame implements NetNoticeServer.ServerListener 
         portField = new UITheme.RoundedTextField(String.valueOf(Protocol.DEFAULT_PORT), 6);
         startStopButton = UITheme.primaryButton("Start server"); startStopButton.addActionListener(e -> toggleServer());
         serverStatusBadge = new UITheme.StatusBadge("Server offline", UITheme.BG_CARD_ALT, UITheme.TEXT_MUTED);
+        addressDisplay = new UITheme.RoundedTextField(lanAddress(), 14);
+        addressDisplay.setEditable(false);
+        addressDisplay.setToolTipText("This computer's LAN address");
         JButton copyAddress = UITheme.optionButton("Copy LAN address");
         copyAddress.setIcon(UITheme.Icons.copy(16, UITheme.PRIMARY));
         copyAddress.addActionListener(e -> {
-            String address = lanAddress() + ":" + portField.getText().trim();
+            addressDisplay.setText(lanAddress());
+            String address = addressDisplay.getText() + ":" + portField.getText().trim();
             java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(address), null);
             copyAddress.setText("Copied " + address);
             javax.swing.Timer timer = new javax.swing.Timer(2500, event -> copyAddress.setText("Copy LAN address")); timer.setRepeats(false); timer.start();
         });
         connection.add(netnotice.common.WorkspaceUI.row(new JLabel("Port"), portField, startStopButton, serverStatusBadge), BorderLayout.CENTER);
-        JTextField addressDisplay = new UITheme.RoundedTextField(lanAddress(), 14);
-        addressDisplay.setEditable(false); addressDisplay.setToolTipText("This computer's LAN address");
         connection.add(netnotice.common.WorkspaceUI.row(addressDisplay, copyAddress), BorderLayout.SOUTH);
         JPanel connectionPage = netnotice.common.WorkspaceUI.stack();
         netnotice.common.WorkspaceUI.add(connectionPage, connection);
@@ -311,17 +321,34 @@ public class ServerGUI extends JFrame implements NetNoticeServer.ServerListener 
     }
 
     private static String lanAddress() {
+        InetAddress routed = null;
+        // Ask the OS which local address it would use. UDP connect sends no application data.
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.connect(InetAddress.getByName("192.0.2.1"), 9);
+            routed = socket.getLocalAddress();
+        } catch (IOException ignored) {
+            // A classroom LAN can work even without a default route.
+        }
+        InetAddress preferred = null;
+        InetAddress fallback = null;
         try {
-            java.util.Enumeration<java.net.NetworkInterface> interfaces=java.net.NetworkInterface.getNetworkInterfaces();
-            while(interfaces.hasMoreElements()) {
-                java.net.NetworkInterface network=interfaces.nextElement();
-                if(!network.isUp() || network.isLoopback() || network.isVirtual()) continue;
-                java.util.Enumeration<java.net.InetAddress> addresses=network.getInetAddresses();
-                while(addresses.hasMoreElements()) { java.net.InetAddress address=addresses.nextElement();
-                    if(address instanceof java.net.Inet4Address && !address.isLoopbackAddress()) return address.getHostAddress(); }
+            for (NetworkInterface network : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if (!network.isUp() || network.isLoopback()) continue;
+                String description = (network.getName() + " " + network.getDisplayName()).toLowerCase(Locale.ROOT);
+                boolean virtual = network.isVirtual() || network.isPointToPoint() ||
+                        description.contains("virtual") || description.contains("hyper-v") ||
+                        description.contains("vmware") || description.contains("docker") || description.contains("vpn");
+                for (InetAddress address : Collections.list(network.getInetAddresses())) {
+                    if (!(address instanceof Inet4Address) || address.isLoopbackAddress()) continue;
+                    if (fallback == null || address.equals(routed)) fallback = address;
+                    if (virtual || address.isLinkLocalAddress()) continue;
+                    if (address.equals(routed)) return address.getHostAddress();
+                    if (preferred == null) preferred = address;
+                }
             }
-        } catch(java.net.SocketException ignored) {}
-        return "127.0.0.1";
+        } catch (SocketException ignored) {}
+        if (preferred != null) return preferred.getHostAddress();
+        return fallback == null ? "127.0.0.1" : fallback.getHostAddress();
     }
 
     private void applyClientFilter() {
@@ -360,6 +387,7 @@ public class ServerGUI extends JFrame implements NetNoticeServer.ServerListener 
 
             try {
                 NetNoticeServer.startServer(port);
+                addressDisplay.setText(lanAddress());
                 serverStatusBadge.setStatus("● Running on Port " + port, UITheme.SUCCESS_BG, UITheme.SUCCESS);
                 startStopButton.setText("Stop Server");
                 startStopButton.setColors(UITheme.DANGER, UITheme.DANGER_HOVER, Color.WHITE);
