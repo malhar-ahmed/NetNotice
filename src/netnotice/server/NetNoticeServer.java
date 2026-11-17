@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import netnotice.common.ActivityType;
 import netnotice.common.Protocol;
 
 /**
@@ -34,6 +35,7 @@ public class NetNoticeServer {
     public interface ServerListener {
         void onClientListUpdated(List<String> clients);
         void onLogMessage(String message);
+        default void onStudentMessage(String sender, String text) {}
         void onPollStateChanged(String question, List<String> options,
                                 int[] voteCounts, int totalVotes, boolean isActive);
     }
@@ -67,13 +69,14 @@ public class NetNoticeServer {
         }
 
         serverSocket = new ServerSocket(port);
+        final ServerSocket listeningSocket=serverSocket;
         isRunning = true;
         logEvent("NetNotice Server started on port " + port);
 
         Thread acceptThread = new Thread(() -> {
             try {
-                while (isRunning && !serverSocket.isClosed()) {
-                    Socket clientSocket = serverSocket.accept();
+                while (isRunning && !listeningSocket.isClosed()) {
+                    Socket clientSocket = listeningSocket.accept();
                     logEvent("New TCP connection: " + clientSocket.getRemoteSocketAddress());
 
                     ClientHandler handler = new ClientHandler(clientSocket);
@@ -81,11 +84,11 @@ public class NetNoticeServer {
                     clientThread.start();
                 }
             } catch (IOException e) {
-                if (isRunning) {
+                if (isRunning && serverSocket==listeningSocket) {
                     logEvent("Server accept loop error: " + e.getMessage());
                 }
             } finally {
-                isRunning = false;
+                if(serverSocket==listeningSocket) isRunning = false;
             }
         }, "NetNotice-AcceptThread");
 
@@ -134,8 +137,8 @@ public class NetNoticeServer {
                             }
                         }
 
-                        if (options.size() < 2) {
-                            System.out.println("At least 2 options are required.");
+                        if (options.size() < 2 || options.size() > 4) {
+                            System.out.println("Two to four options are required.");
                             continue;
                         }
 
@@ -225,7 +228,7 @@ public class NetNoticeServer {
      * Broadcast an announcement to all currently connected clients.
      */
     public static synchronized void broadcastAnnouncement(String announcementText) {
-        String message = Protocol.PREFIX_ANNOUNCEMENT + announcementText;
+        String message = Protocol.PREFIX_ANNOUNCEMENT + Protocol.encode(announcementText);
         logEvent("Broadcasting announcement: " + announcementText);
 
         for (ClientHandler handler : connectedClients.values()) {
@@ -242,6 +245,9 @@ public class NetNoticeServer {
      * If a poll is already active, it is ended first.
      */
     public static synchronized void startPoll(String question, List<String> options) {
+        if(question==null || question.trim().isEmpty() || options==null || options.size()<2 || options.size()>4
+                || options.stream().anyMatch(value -> value==null || value.trim().isEmpty()))
+            throw new IllegalArgumentException("A poll needs a question and two to four nonempty choices.");
         if (currentPollQuestion != null) {
             endPoll();
         }
@@ -252,9 +258,9 @@ public class NetNoticeServer {
 
         // Build poll message: POLL|question|opt1|opt2|...
         StringBuilder sb = new StringBuilder(Protocol.PREFIX_POLL);
-        sb.append(question);
+        sb.append(Protocol.encode(question));
         for (String option : options) {
-            sb.append("|").append(option);
+            sb.append("|").append(Protocol.encode(option));
         }
         String pollMessage = sb.toString();
 
@@ -262,7 +268,7 @@ public class NetNoticeServer {
             handler.sendMessage(pollMessage);
         }
 
-        logEvent("Poll started: " + question + " (" + options.size() + " options)");
+        logEvent(ActivityType.from(question).title + " started: " + ActivityType.displayQuestion(question) + " (" + options.size() + " options)");
         notifyPollStateChanged(true);
     }
 
@@ -284,9 +290,9 @@ public class NetNoticeServer {
         pollVotes.put(clientName, optionIndex);
 
         if (isChange) {
-            logEvent(clientName + " changed vote to: " + currentPollOptions.get(optionIndex));
+            logEvent(clientName + (isQuiz() ? " changed answer to: " : " changed vote to: ") + currentPollOptions.get(optionIndex));
         } else {
-            logEvent(clientName + " voted: " + currentPollOptions.get(optionIndex));
+            logEvent(clientName + (isQuiz() ? " answered: " : " voted: ") + currentPollOptions.get(optionIndex));
         }
 
         // Broadcast updated results to all clients
@@ -319,8 +325,9 @@ public class NetNoticeServer {
             handler.sendMessage(endMessage);
         }
 
-        logEvent("Poll ended: " + currentPollQuestion
-                + " (Total votes: " + pollVotes.size() + ")");
+        ActivityType type = ActivityType.from(currentPollQuestion);
+        logEvent(type.title + " closed: " + ActivityType.displayQuestion(currentPollQuestion)
+                + " (" + type.count(pollVotes.size()) + ")");
 
         // Notify listener before clearing state so it can read final data
         notifyPollStateChanged(false);
@@ -349,9 +356,9 @@ public class NetNoticeServer {
             return null;
         }
         StringBuilder sb = new StringBuilder(Protocol.PREFIX_POLL);
-        sb.append(currentPollQuestion);
+        sb.append(Protocol.encode(currentPollQuestion));
         for (String option : currentPollOptions) {
-            sb.append("|").append(option);
+            sb.append("|").append(Protocol.encode(option));
         }
         return sb.toString();
     }
@@ -362,6 +369,7 @@ public class NetNoticeServer {
      * @return the result message, or null if no poll is active
      */
     public static synchronized String getCurrentPollResultMessage() {
+        if(isQuiz()) return null;
         if (currentPollQuestion == null) {
             return null;
         }
@@ -383,14 +391,16 @@ public class NetNoticeServer {
         if (currentPollQuestion != null && pollVotes.remove(clientName) != null) {
             broadcastPollResults();
             notifyPollStateChanged(true);
-            logEvent("Poll vote removed (client disconnected): " + clientName);
+            logEvent((isQuiz() ? "Quiz answer" : "Poll vote") + " removed (client disconnected): " + clientName);
         }
     }
 
     /**
      * Broadcast current poll results to all connected clients.
      */
+    private static boolean isQuiz() { return ActivityType.from(currentPollQuestion) == ActivityType.QUIZ; }
     private static void broadcastPollResults() {
+        if(isQuiz()) return;
         int[] counts = getVoteCounts();
         StringBuilder sb = new StringBuilder(Protocol.PREFIX_POLL_RESULT);
         for (int i = 0; i < counts.length; i++) {
@@ -457,6 +467,13 @@ public class NetNoticeServer {
     /**
      * Log a message to console and GUI listener.
      */
+    public static void receiveStudentMessage(String sender,String text) {
+        logEvent("["+sender+"] "+text);
+        ServerListener target;
+        synchronized(NetNoticeServer.class) { target=listener; }
+        if(target!=null) target.onStudentMessage(sender,text);
+    }
+
     public static void logEvent(String message) {
         System.out.println("[SERVER] " + message);
         if (listener != null) {

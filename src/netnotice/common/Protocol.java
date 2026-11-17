@@ -23,4 +23,15 @@ public class Protocol {
     public static final String PREFIX_POLL = "POLL|";               // Server sends poll: POLL|question|opt1|opt2|...
     public static final String PREFIX_POLL_RESULT = "POLL_RESULT|"; // Live results: POLL_RESULT|count1|count2|...
     public static final String PREFIX_POLL_END = "POLL_END|";       // Poll ended: POLL_END|count1|count2|...
+    // Encode only fields that could break the line/pipe framing. Plain legacy fields stay readable.
+    public static String encode(String text) {
+        if(text.contains("\n") || text.contains("\r") || text.contains("|") || text.startsWith("~b64~"))
+            return "~b64~"+java.util.Base64.getEncoder().encodeToString(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return text;
+    }
+    public static String decode(String text) {
+        if(!text.startsWith("~b64~")) return text;
+        try { return new String(java.util.Base64.getDecoder().decode(text.substring(5)),java.nio.charset.StandardCharsets.UTF_8); }
+        catch(IllegalArgumentException ex) { return text; }
+    }
 }
