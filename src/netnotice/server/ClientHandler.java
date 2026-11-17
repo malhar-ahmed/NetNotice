@@ -53,11 +53,11 @@ public class ClientHandler implements Runnable {
         try (
             Socket client = socket;
             BufferedReader reader = new BufferedReader(
-                new InputStreamReader(client.getInputStream())
+                new InputStreamReader(client.getInputStream(), java.nio.charset.StandardCharsets.UTF_8)
             )
         ) {
             // Initialize writer for this client socket
-            this.writer = new PrintWriter(client.getOutputStream(), true);
+            this.writer = new PrintWriter(client.getOutputStream(), true, java.nio.charset.StandardCharsets.UTF_8);
 
             // Send initial welcome message
             sendMessage(Protocol.PREFIX_MESSAGE + "Connected to NetNotice Server!");
@@ -110,11 +110,11 @@ public class ClientHandler implements Runnable {
                         continue;
                     }
 
-                    String text = message.substring(Protocol.PREFIX_MESSAGE.length());
+                    String text = Protocol.decode(message.substring(Protocol.PREFIX_MESSAGE.length()));
                     System.out.println("[" + clientName + "] " + text);
-                    NetNoticeServer.logEvent("[" + clientName + "] " + text);
+                    NetNoticeServer.receiveStudentMessage(clientName, text);
 
-                    sendMessage(Protocol.PREFIX_MESSAGE + "Server received: " + text);
+                    sendMessage(Protocol.PREFIX_MESSAGE + Protocol.encode("Server received: " + text));
                 }
 
                 // Client disconnect request
@@ -138,7 +138,7 @@ public class ClientHandler implements Runnable {
                         boolean accepted = NetNoticeServer.submitPollAnswer(clientName, optionIndex);
 
                         if (!accepted) {
-                            sendMessage(Protocol.PREFIX_ERROR + "No active poll or invalid option");
+                            sendMessage(Protocol.PREFIX_ERROR + "No active activity or invalid option");
                         }
                     } catch (NumberFormatException e) {
                         sendMessage(Protocol.PREFIX_ERROR + "Invalid answer format");

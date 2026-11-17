@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.Scanner;
+import netnotice.common.ActivityType;
 import netnotice.common.Protocol;
 
 /**
@@ -40,10 +41,10 @@ public class NetNoticeClient {
         try (
             Socket socket = new Socket(serverIP, port);
             BufferedReader reader = new BufferedReader(
-                new InputStreamReader(socket.getInputStream())
+                new InputStreamReader(socket.getInputStream(), java.nio.charset.StandardCharsets.UTF_8)
             );
             PrintWriter writer = new PrintWriter(
-                socket.getOutputStream(), true
+                socket.getOutputStream(), true, java.nio.charset.StandardCharsets.UTF_8
             );
             Scanner scanner = new Scanner(System.in)
         ) {
@@ -93,11 +94,12 @@ public class NetNoticeClient {
             Thread listener = new Thread(() -> {
                 try {
                     String response;
+                    ActivityType type = ActivityType.POLL;
                     while ((response = reader.readLine()) != null) {
 
                         // Announcement
                         if (response.startsWith(Protocol.PREFIX_ANNOUNCEMENT)) {
-                            String announcement = response.substring(Protocol.PREFIX_ANNOUNCEMENT.length());
+                            String announcement = Protocol.decode(response.substring(Protocol.PREFIX_ANNOUNCEMENT.length()));
                             System.out.println("\n========================================");
                             System.out.println("  NEW ANNOUNCEMENT:");
                             System.out.println("  " + announcement);
@@ -107,14 +109,16 @@ public class NetNoticeClient {
                         // Poll question received (Member 3)
                         else if (response.startsWith(Protocol.PREFIX_POLL)) {
                             String payload = response.substring(Protocol.PREFIX_POLL.length());
-                            String[] parts = payload.split("\\|");
+                            String[] parts = payload.split("\\|", -1);
+                            for(int field=0;field<parts.length;field++) parts[field]=Protocol.decode(parts[field]);
                             if (parts.length >= 3) {
                                 System.out.println("\n========================================");
-                                System.out.println("  NEW POLL: " + parts[0]);
+                                type = ActivityType.from(parts[0]);
+                                System.out.println("  " + type.title + ": " + ActivityType.displayQuestion(parts[0]));
                                 for (int i = 1; i < parts.length; i++) {
                                     System.out.println("    " + (i - 1) + ") " + parts[i]);
                                 }
-                                System.out.println("  Type 'vote <number>' to answer");
+                                System.out.println(type == ActivityType.QUIZ ? "  Type answer <number>" : "  Type vote <number>");
                                 System.out.println("========================================\n");
                             }
                         }
@@ -128,9 +132,8 @@ public class NetNoticeClient {
                                 if (i > 0) {
                                     sb.append(", ");
                                 }
-                                sb.append("Option ").append(i).append(": ").append(counts[i]);
+                                sb.append("Option ").append(i).append(": ").append(type.count(Integer.parseInt(counts[i])));
                             }
-                            sb.append(" votes");
                             System.out.println(sb.toString());
                         }
 
@@ -139,18 +142,20 @@ public class NetNoticeClient {
                             String payload = response.substring(Protocol.PREFIX_POLL_END.length());
                             String[] counts = payload.split("\\|");
                             System.out.println("\n========================================");
-                            StringBuilder sb = new StringBuilder("  POLL ENDED - Final: ");
+                            StringBuilder sb = new StringBuilder(type.title + " results - Final: ");
                             for (int i = 0; i < counts.length; i++) {
                                 if (i > 0) {
                                     sb.append(", ");
                                 }
-                                sb.append("Option ").append(i).append(": ").append(counts[i]);
+                                sb.append("Option ").append(i).append(": ").append(type.count(Integer.parseInt(counts[i])));
                             }
-                            sb.append(" votes");
                             System.out.println(sb.toString());
                             System.out.println("========================================\n");
                         }
 
+                        else if(response.startsWith(Protocol.PREFIX_MESSAGE)) {
+                            System.out.println("[SERVER] " + Protocol.decode(response.substring(Protocol.PREFIX_MESSAGE.length())));
+                        }
                         // Other server messages
                         else {
                             System.out.println("[SERVER] " + response);
@@ -168,7 +173,7 @@ public class NetNoticeClient {
             listener.start();
 
             System.out.println("Joined successfully. You can now send messages or wait for announcements.");
-            System.out.println("Type 'vote <number>' to answer polls.");
+            System.out.println("Use vote <number> for polls and answer <number> for quizzes.");
             System.out.println("Type 'exit' to disconnect.");
 
             // Send messages to server
@@ -181,18 +186,18 @@ public class NetNoticeClient {
                 }
 
                 // Vote command for polls (Member 3)
-                if (input.toLowerCase().startsWith("vote ")) {
+                if (input.regionMatches(true, 0, "vote ", 0, 5) || input.regionMatches(true, 0, "answer ", 0, 7)) {
                     try {
-                        int idx = Integer.parseInt(input.substring(5).trim());
+                        int idx = Integer.parseInt(input.substring(input.indexOf(' ') + 1).trim());
                         writer.println(Protocol.PREFIX_ANSWER + idx);
                     } catch (NumberFormatException e) {
-                        System.out.println("Usage: vote <number>");
+                        System.out.println("Usage: " + input.substring(0, input.indexOf(' ')) + " <number>");
                     }
                     continue;
                 }
 
                 if (!input.trim().isEmpty()) {
-                    writer.println(Protocol.PREFIX_MESSAGE + input);
+                    writer.println(Protocol.PREFIX_MESSAGE + Protocol.encode(input));
                 }
             }
 
