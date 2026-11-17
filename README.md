@@ -2,9 +2,81 @@
 
 Real-time LAN announcements, replies and live polls for EC5205 - Operating System and Network Programming. Built with Java 21, TCP sockets, Java threads and Swing.
 
-## Open the desktop app
+## Run NetNotice on Windows
 
-Double-click `Start-Server.cmd` for the instructor workspace and `Start-Client.cmd` for the student workspace. Both launchers compile current sources into `out` before starting Java. Close older windows before relaunching.
+Use JDK 21 on each computer running NetNotice. In PowerShell, check that both commands report version 21:
+
+```powershell
+java -version
+javac -version
+```
+
+The commands below assume the project is in `D:\Projects\NetNotice`. If your copy is elsewhere, use its folder in each `cd` command.
+
+### Desktop GUI
+
+1. **Instructor.** Double-click `Start-Server.cmd` in File Explorer, or run it from PowerShell:
+
+   ```powershell
+   cd 'D:\Projects\NetNotice'
+   .\Start-Server.cmd
+   ```
+
+   In the instructor window, open **Connection**, leave **Port** at `5000`, and click **Start server**. Keep this window open.
+
+2. **Student.** Double-click `Start-Client.cmd`, or run it in a second PowerShell window:
+
+   ```powershell
+   cd 'D:\Projects\NetNotice'
+   .\Start-Client.cmd
+   ```
+
+   Open **Connection**, enter a unique name under **Your name**, set **Server address** to `127.0.0.1` and **Port** to `5000`, then click **Join classroom**.
+
+   If the student is on another computer on the same LAN, use **Copy LAN address** in the instructor’s **Connection** page. For example, if it copies `192.168.1.25:5000`, enter `192.168.1.25` under **Server address** and `5000` under **Port**.
+
+Both GUI launchers compile the current source into `out` automatically. To check the connection, send an announcement from the instructor’s **Overview** page and look for it on the student’s **Classroom** page.
+
+### Terminal only
+
+1. **Compile** in PowerShell. Do this once per computer and again after changing the source:
+
+   ```powershell
+   cd 'D:\Projects\NetNotice'
+   $sources = (Get-ChildItem .\src -Recurse -Filter '*.java').FullName
+   javac -encoding UTF-8 -d out @sources
+   ```
+
+2. **Start the instructor server** in the same terminal:
+
+   ```powershell
+   java -cp out netnotice.server.NetNoticeServer --console
+   ```
+
+   Wait for `NetNotice Server started on port 5000`. Leave this terminal running.
+
+3. **Join as a student** from a second PowerShell terminal:
+
+   ```powershell
+   cd 'D:\Projects\NetNotice'
+   java -cp out netnotice.client.NetNoticeClient --console 127.0.0.1
+   ```
+
+   Enter a unique display name when prompted. For a student on another computer, replace `127.0.0.1` with the instructor’s LAN IPv4 address. Both console apps use port `5000`.
+
+4. **Try an activity.** Type these commands in the running NetNotice consoles:
+
+   | Action | Instructor terminal | Student terminal |
+   | --- | --- | --- |
+   | Send an announcement and reply | Type `Class starts now` | Type `Ready` |
+   | Start a poll and vote | `/poll What should we review? \| Threads \| Sockets` | `vote 0` selects Threads |
+   | Close the poll | `/endpoll` | Read the final totals |
+   | Start a quiz and answer | `/poll [Quiz] Which protocol uses a connection? \| TCP \| UDP` | `answer 0` selects TCP |
+   | Reveal quiz results | `/endpoll` | Read the final answer counts |
+
+   Choices are numbered from `0`. To finish, type `exit` in the student terminal, then `exit` in the instructor terminal.
+
+## Desktop interface
 
 The redesigned interface has a pale sidebar, white toolbar, simple outline icons and restrained blue accents. Compact windows replace the sidebar with a row of directly selectable pages. Pages scroll vertically and fields adapt to the available width.
 
@@ -33,25 +105,6 @@ Student pages: Classroom, Activities, Connection.
 The interface follows Apple's [sidebar](https://developer.apple.com/design/human-interface-guidelines/sidebars), [typography](https://developer.apple.com/design/human-interface-guidelines/typography) and [colour](https://developer.apple.com/design/human-interface-guidelines/color) guidance: neutral surfaces, one blue action accent, clear hierarchy and a separate navigation layer. Icons and the notification bell are original; no Apple assets are copied.
 
 macOS uses its system look and feel and interface font. Windows uses bundled Inter for controls and Inter Display for titles and reading text. The fonts ship under the SIL Open Font License in `assets/fonts/LICENSE.txt`.
-
-## Compile
-
-```powershell
-javac -encoding UTF-8 -d out src/netnotice/common/*.java src/netnotice/server/*.java src/netnotice/client/*.java src/netnotice/test/*.java
-```
-
-## Run
-
-```powershell
-java -cp out netnotice.server.NetNoticeServer
-java -cp out netnotice.client.NetNoticeClient
-```
-
-Console server: `java -cp out netnotice.server.NetNoticeServer --console`
-
-Console client: `java -cp out netnotice.client.NetNoticeClient --console SERVER_IP`
-
-Replace SERVER_IP with the server's IPv4 address. Console commands: send text to broadcast, `/poll Question | Option1 | Option2`, `/endpoll`, and `exit`. Clients use `vote <zero-based index>` and `exit`.
 
 ## Verify
 
